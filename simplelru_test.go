@@ -2,7 +2,9 @@ package simplelru
 
 import (
 	"fmt"
+	"time"
 	"testing"
+	"strconv"
 )
 
 
@@ -16,15 +18,15 @@ func TestNewLRUCache(t *testing.T) {
 		t.Error("Unexpected max cache size")
 	}
 
-	if cache.prune_size != 10 {
+	if cache.pruneSize != 10 {
 		t.Error("Unexpected prune_size")
 	}
 
-	if cache.hit_count != 0 {
+	if cache.hitCount != 0 {
 		t.Error("hit_count initialization error")
 	}
 
-	if cache.miss_count != 0 {
+	if cache.missCount != 0 {
 		t.Error("miss_count initialization error")
 	}
 
@@ -62,7 +64,8 @@ func TestPurge(t *testing.T) {
 	if _, ok := cache.Get("12"); ok {
 		t.Error("Cache should have been empty")
 	}
-	
+
+	cache.Close()
 }
 
 
@@ -135,6 +138,7 @@ func TestSet(t *testing.T) {
 	cache.Set(0, 500)
 
 	if cache.Len() != 100 {
+		t.Error(cache.Len())
 		t.Error("Updating a keys shouldn't trigger a prune")
 	}
 
@@ -146,9 +150,42 @@ func TestSet(t *testing.T) {
 	if value, ok := cache.Get(0); !ok || value!=500 {
 		t.Error("Updating a key value didn't refresh its age")
 	}
+
+	cache.Close()
 }
 
 
+
+// Test Set prunes the oldest elements when there isn't space
+func TestSetPrune(t *testing.T) {	
+	
+	cache := NewLRUCache(100, 5)
+	for i:=0; i<100; i++ {
+		cache.Set(i, strconv.Itoa(i))
+	}
+	if cache.Len() != 100 {
+		t.Error("The cache cache was pruned before filling")
+	}
+
+	cache.Set(1000, 1000)
+	if cache.Len() != 96 {
+		t.Error("Set didn't prune the cache when it reached max size")
+	}
+
+	// Oldest elements pruned
+	if (cache.Contains(0) || cache.Contains(1) || cache.Contains(2) || 
+		cache.Contains(3) || cache.Contains(4)) {
+		t.Error("Set didn't purge the oldest elements")
+	}
+
+	// Newest elements still in cache
+	if !cache.Contains(99) || !cache.Contains(1000) {
+		t.Error("Set deleted the newest elements")
+	}
+}
+
+
+// Test Remove basic operation
 func TestRemove(t *testing.T) {
 	cache := NewLRUCache(100, 10)
 	cache.Set("1", 1)
@@ -173,10 +210,12 @@ func TestRemove(t *testing.T) {
 	if hit, miss := cache.Stats(); hit != 1 || miss != 2 {
 		t.Error("Remove modified stats")
 	}
+
+	cache.Close()
 }
 
 
-
+// Test Peek basic operation
 func TestPeek(t *testing.T) {
 
 	cache := NewLRUCache(100, 10)
@@ -212,8 +251,11 @@ func TestPeek(t *testing.T) {
 		t.Error("Peek updated cache hit/miss stats")
 	}
 
+	cache.Close()
 }
 
+
+// Test Contains basic operation
 func TestContains(t *testing.T) {
 	cache := NewLRUCache(100, 10)
 	for i:=0; i<100; i++ {
@@ -245,8 +287,35 @@ func TestContains(t *testing.T) {
 	if new_hit, new_miss := cache.Stats() ; new_hit != hit || new_miss != miss {
 		t.Error("Contains updated cache hit/miss stats")
 	}
+
+	cache.Close()
 }
 
+
+
+func TestRemoveOldest(t *testing.T) {	
+	cache := NewLRUCache(100, 10)
+	
+	// Removing from empty cache shouldn't
+	cache.RemoveOldest()
+
+
+
+	for i:=0; i<100; i++ {
+		cache.Set(i, i)
+	}
+
+	if !cache.Contains(0) {
+		t.Error("Cache should contain 0")
+	}
+
+	cache.RemoveOldest()
+	
+	if cache.Contains(0) {
+		t.Error("PopOldest didn't remove 0 from cache")
+	}
+	
+}
 
 // Test stat generation
 func TestStats(t *testing.T) {
@@ -276,7 +345,8 @@ func TestStats(t *testing.T) {
 	if hit, miss := cache.Stats(); hit!=1 || miss!=1 {
 		t.Error("Purge shouldn't have reseted the stats")
 	}
-	return
+	
+	cache.Close()
 }
 
 
@@ -298,23 +368,114 @@ func TestResetStats(t *testing.T) {
 	if hit, miss := cache.Stats(); hit!=0 || miss!=0 {
 		t.Error("ResetStats failed")
 	}
+
+	cache.Close()
 }
 
 func TestString(t *testing.T) {
 	cache := NewLRUCache(100, 1)
 	fmt.Sprintf("%v", cache)
+
+	cache.Close()
 }
 
-//TODO: Some basic concurrency tests
-func TestConcurrency(t *testing.T) {
+
+func TestConcurrency(t *testing.T) {	
+
+	// Initialize cache
+	cache := NewLRUCache(100, 1)
+
+	for i:=0; i<100; i++ {
+		cache.Set(i, i)
+	}
+
+	// Functions to Set/Get cache values concurrently
+	concurrentGet := func(cache *LRUCache, key interface{}, delay time.Duration) {
+		time.Sleep(delay*time.Millisecond)
+		cache.Get(key)
+	}
+	concurrentPeek := func(cache *LRUCache, key interface{}, delay time.Duration) {
+		time.Sleep(delay*time.Millisecond)
+		cache.Peek(key)
+	}
+	concurrentSet := func(cache *LRUCache, key interface{}, value interface{}, delay time.Duration) {
+		time.Sleep(delay*time.Millisecond)
+		cache.Set(key, value)
+	}
+
+	// Spawn routines updating/creating/reading
+	for i := 0 ; i < 50; i++ {
+		go concurrentGet(cache, i, 5)
+		go concurrentPeek(cache, i, 3)
+		go concurrentSet(cache, i, i+10, 8)
+		go concurrentGet(cache, i, 4)
+		go concurrentPeek(cache, i, 10)
+		go concurrentSet(cache, i+100, i+200, 12)
+	}
+
+	// Wait enough time to assure all operations have finished
+	time.Sleep(2000*time.Millisecond)
+
+	// Check all cache values were updated correctly
+	for i:= 0; i < 50; i++ {
+		if value, ok := cache.Get(i); !ok || value.(int) != i+10 {
+			t.Error("Cache not updated successfully")
+		}
+		if value, ok := cache.Get(i+100); !ok || value.(int) != i+200 {
+			t.Error("Cache not updated successfully")
+		}
+	}
+
+	cache.Close()
 }
 
-func TestOnEvict(t *testing.T) {
-	return
-}
 
-func TestOnMiss(t *testing.T) {
-	return
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
