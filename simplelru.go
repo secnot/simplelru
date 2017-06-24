@@ -40,6 +40,8 @@ type LRUCache struct{
 
 	// Max Size
 	size int
+
+	// Elements pruned everytime the cache if full
 	pruneSize int
 
 	// Hit miss stats

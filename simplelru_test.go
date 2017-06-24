@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"testing"
+	"strconv"
 )
 
 
@@ -154,6 +155,37 @@ func TestSet(t *testing.T) {
 }
 
 
+
+// Test Set prunes the oldest elements when there isn't space
+func TestSetPrune(t *testing.T) {	
+	
+	cache := NewLRUCache(100, 5)
+	for i:=0; i<100; i++ {
+		cache.Set(i, strconv.Itoa(i))
+	}
+	if cache.Len() != 100 {
+		t.Error("The cache cache was pruned before filling")
+	}
+
+	cache.Set(1000, 1000)
+	if cache.Len() != 96 {
+		t.Error("Set didn't prune the cache when it reached max size")
+	}
+
+	// Oldest elements pruned
+	if (cache.Contains(0) || cache.Contains(1) || cache.Contains(2) || 
+		cache.Contains(3) || cache.Contains(4)) {
+		t.Error("Set didn't purge the oldest elements")
+	}
+
+	// Newest elements still in cache
+	if !cache.Contains(99) || !cache.Contains(1000) {
+		t.Error("Set deleted the newest elements")
+	}
+}
+
+
+// Test Remove basic operation
 func TestRemove(t *testing.T) {
 	cache := NewLRUCache(100, 10)
 	cache.Set("1", 1)
@@ -183,7 +215,7 @@ func TestRemove(t *testing.T) {
 }
 
 
-
+// Test Peek basic operation
 func TestPeek(t *testing.T) {
 
 	cache := NewLRUCache(100, 10)
@@ -223,6 +255,7 @@ func TestPeek(t *testing.T) {
 }
 
 
+// Test Contains basic operation
 func TestContains(t *testing.T) {
 	cache := NewLRUCache(100, 10)
 	for i:=0; i<100; i++ {
@@ -258,6 +291,31 @@ func TestContains(t *testing.T) {
 	cache.Close()
 }
 
+
+
+func TestRemoveOldest(t *testing.T) {	
+	cache := NewLRUCache(100, 10)
+	
+	// Removing from empty cache shouldn't
+	cache.RemoveOldest()
+
+
+
+	for i:=0; i<100; i++ {
+		cache.Set(i, i)
+	}
+
+	if !cache.Contains(0) {
+		t.Error("Cache should contain 0")
+	}
+
+	cache.RemoveOldest()
+	
+	if cache.Contains(0) {
+		t.Error("PopOldest didn't remove 0 from cache")
+	}
+	
+}
 
 // Test stat generation
 func TestStats(t *testing.T) {

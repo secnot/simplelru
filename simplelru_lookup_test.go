@@ -251,10 +251,48 @@ func TestParallelLookupRequests(t *testing.T) {
 }
 
 
-// TODO: Basic Set operations tests
+// Basic Set tests
 func TestLookupSet(t *testing.T) {
-	return
+	storage := newStorage(1000)
+
+	// lookup func has 500ms delay
+	lookup := func (key interface{}) (value interface{}, ok bool){
+		time.Sleep(400 * time.Millisecond)
+		value, ok = storage.Get(key)
+		return
+	}
+	cache := NewLookupLRUCache(10000, 100, lookup, 5, 1000)
+
+	// Lookup some initial values
+	if value, ok := cache.Get(10); !ok || value != 10 {
+		t.Error("Get: Lookup Error")
+	}
+	cache.Get(100)
+	cache.Get(10000)
+
+	// Set value with a 0-9ms delay
+	concurrentSet := func (cache *LRUCache, key interface{}, value interface{}) {
+		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+		cache.Set(key, value)
+	}
+	
+	for i := 0; i < 5000; i++ {
+		go concurrentSet(cache, i, i+9000)
+	}
+
+	// Wait for all Set calls to finish
+	time.Sleep(1000*time.Millisecond)
+
+	// Verify all values were Set
+	for i := 0; i < 5000; i++ {
+		if value, ok := cache.Get(i); !ok || value.(int) != i+9000 {
+			t.Error("There was an error while setting cache values")
+		}
+	}
+
+	cache.Close()	
 }
+
 
 // Test interrupting lookup operations by Setting the key value
 func TestLookupInterrupt(t *testing.T) {
@@ -348,8 +386,56 @@ func TestLookupPeek(t *testing.T) {
 }	
 	
 
-//TODO: Operate over two LRUCache at the same time (check there is no shared state)
+// Operate with two caches to verify there is no shared state
+func TestLookupDualCaches(t *testing.T) {
+	storage := newStorage(1000)
 
+	// lookup func has random 0-9ms delay
+	lookup := func (key interface{}) (value interface{}, ok bool){
+		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+		value, ok = storage.Get(key)
+		return
+	}
+
+	concurrentSet := func (cache *LRUCache, key interface{}, value interface{}) {
+		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+		cache.Set(key, value)
+	}
+
+	// Queue size 10
+	cache1 := NewLookupLRUCache(1000, 100, lookup, 8, 10)
+	cache2 := NewLookupLRUCache(1000, 100, lookup, 8, 10)
+
+	// Set different values for botch caches)
+	for i := 0; i < 500; i++{
+		go concurrentSet(cache1, i, i+1000)
+		go concurrentSet(cache1, i, i+1000)
+		go concurrentSet(cache2, i, i+2000)
+		go concurrentSet(cache2, i, i+2000)
+	}
+
+	// Wait until all requests are finished
+	time.Sleep(2000*time.Millisecond)
+
+	// Verify results
+	for i := 0; i < 500; i++ {
+		if value, ok := cache1.Get(i); !ok || value != i+1000 {
+			t.Error("cache1 was not updated successfully")
+		}
+		if value, ok := cache2.Get(i); !ok || value != i+2000 {
+			t.Error("cache2 was not updated successfully")
+		}
+	}
+	for i :=500; i < 1000; i++ {
+		if value, ok := cache1.Get(i); !ok || value != i {
+			t.Error("cache1 was not updated successfully")
+		}
+		if value, ok := cache2.Get(i); !ok || value != i {
+			t.Error("cache2 was not updated successfully")
+		}
+	}
+
+}
 
 
 // Test full lookup request queue
