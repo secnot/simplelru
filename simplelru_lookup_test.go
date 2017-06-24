@@ -186,6 +186,43 @@ func TestConcurrentGetRequests(t *testing.T) {
 	cache.Close()
 }
 
+
+// Test interrupting a Get lookup by th
+func TestConcurrentGetSet(t *testing.T) {
+	storage := newStorage(1000)
+
+	lookup := func (key interface{}) (value interface{}, ok bool){
+		time.Sleep(150 * time.Millisecond)
+		return storage.Get(key)
+	}
+
+	cache := NewLookupLRUCache(100, 10, lookup, 1, 1000)
+
+	// Concurrent requests 
+	concurrentGet := func(cache *LRUCache, key interface{}, expected_value interface{}) {
+		if value, ok := cache.Get(key); !ok || value != expected_value {
+			t.Error("Get didn't receive the expected value")
+		}
+	}
+	concurrentSet := func(cache *LRUCache, key interface{}, value interface{}) {
+		cache.Set(key, value)
+	}
+
+	for i := 0; i < 10; i++ {
+		go concurrentGet(cache, i, 3000)
+		go concurrentGet(cache, i, 3000)
+		time.Sleep(20*time.Millisecond)
+		go concurrentSet(cache, i, 3000)
+		time.Sleep(400*time.Millisecond)
+	}
+
+	for i := 0; i < 10; i++ {
+		if value, ok := cache.Get(i); !ok || value != 3000 {
+			t.Error(fmt.Sprintf("Get expected 3000, reveiced %v", value))
+		}
+	}
+}
+	
 // Test with parallel lookup goroutines
 func TestParallelLookupRequests(t *testing.T) {
 	storage := newStorage(1000)
