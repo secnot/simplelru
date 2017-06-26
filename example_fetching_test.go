@@ -14,37 +14,38 @@ const (
 	// Elements removed everytime there is prune
 	pruneSize = 100
 
-	// Workers in the lookup pool
-	lookupWorkers = 2
+	// Workers in the fetch pool
+	fetchWorkers = 2
 
-	// Lookup workers request queue size for worker
-	lookupQueueSize = lookupWorkers * 2
+	// fetch request jobs queue size
+	// (Tune for each application)
+	fetchQueueSize = fetchWorkers * 2
 )
 
 
-// Simulated db lookup, if there is more than one worker in the pool the
-// function must be concurrency-safe. (type: LookupFunc)
-func mockDBLookup(key interface{}) (value interface{}, ok bool) {
+// Simulated db query, if there is more than one worker in the pool the
+// function must be concurrency-safe. (type: FetchFunc)
+func mockDBFetch(key interface{}) (value interface{}, ok bool) {
 	// Simulate lookup delay
 	time.Sleep(20 * time.Millisecond)
 
-	// If ok is true the lookup was successful, and the return value
+	// If ok is true the query was successful, and the return value
 	// is returned and stored into the cache.
 	return fmt.Sprintf("query result: %v", key), true
 }
 
 
-// ExampleNewLookupLRUCache demostrates how to create a LRUCache with lookup functionality.
+// Demostrates how to create a LRUCache with fetching functionality.
 func ExampleNewLookupLRUCache() {
 
-	cache := simplelru.NewLookupLRUCache(
+	cache := simplelru.NewFetchingLRUCache(
 		maxCacheSize,
 		pruneSize,
-		mockDBLookup,
-		lookupWorkers,
-		lookupQueueSize)
+		mockDBFetch,
+		fetchWorkers,
+		fetchQueueSize)
 
-	// The key is not cached so there is a lookup
+	// The key is not cached so fetch function is called
 	value, _ := cache.Get("John")
 	fmt.Println(value)
 
