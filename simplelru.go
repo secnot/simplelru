@@ -57,9 +57,9 @@ type LRUCache struct{
 }
 
 
+// Lookup pool worker function
 func goRequestLookupFunc(c *LRUCache) {
 
-	//var key interface{}
 	defer c.wg.Done()	
 	for {
 		// Next key for lookup
@@ -68,7 +68,7 @@ func goRequestLookupFunc(c *LRUCache) {
 			return // Received exit signal
 		}
 
-		// Check the key is still in lookupM and wasn't removed by a Set call
+		// Check the request is still in lookupM and wasn't removed by a Set call
 		c.Lock()
 		if _, ok := c.lookupM[key]; !ok {
 			c.Unlock()
@@ -76,13 +76,16 @@ func goRequestLookupFunc(c *LRUCache) {
 		}
 		c.Unlock()
 
-
-		// Call lookup function and return value
+		// Use lookup function
 		value, lookupOk := c.lookup(key)
-		
+		if !lookupOk {
+			// If the lookup failed discard the value as a precaution
+			value = nil
+		}
+
+		// Check once more if the request was removed from the lookupM,
+		// if not, set the value and signal waiting routines
 		c.Lock()
-		// If the key was removed from the lookupMap it means a Set call updated
-		// the value, and it has precedence over this
 		if request, stillWaiting := c.lookupM[key]; stillWaiting { 	
 			request.value = value
 			request.ok = lookupOk
@@ -90,7 +93,7 @@ func goRequestLookupFunc(c *LRUCache) {
 			// All blocked Get methods should keep a reference
 			delete(c.lookupM, key)
 
-			// Clossing the channel marks request finished
+			// Clossing the channel marks the request finished
 			close(request.ready)
 
 			// Only update the cache if the lookup was successful
@@ -106,7 +109,7 @@ func goRequestLookupFunc(c *LRUCache) {
 // New LRUCache with lookup
 func NewLookupLRUCache(size int, pruneSize int, 
 					   lookup LookupFunc, 
-					   lookupPoolSize uint16,  
+					   lookupWorkers uint16,  
 					   lookupQueueSize uint32) *LRUCache {
 	if size < 1 {
 		panic("NewLookupLRUCache: min size is 1")
@@ -114,7 +117,7 @@ func NewLookupLRUCache(size int, pruneSize int,
 	if pruneSize < 1 {
 		panic("NewLookupLRUCache: min pruneSize is 1")
 	}
-	if lookup != nil && lookupPoolSize == 0 {
+	if lookup != nil && lookupWorkers == 0 {
 		panic("NewLookupLRUCache: If a lookup function is provided the min pool size is 1")
 	}
 	if lookup != nil && lookupQueueSize < 1{
@@ -132,7 +135,7 @@ func NewLookupLRUCache(size int, pruneSize int,
 		lookupQ: make(chan interface{}, lookupQueueSize),
 	}
 
-	for i := uint16(0); i < lookupPoolSize; i++ {
+	for i := uint16(0); i < lookupWorkers; i++ {
 		cache.wg.Add(1)
 		go goRequestLookupFunc(cache)
 	}
@@ -148,7 +151,7 @@ func NewLRUCache(size int, pruneSize int) *LRUCache {
 }
 
 
-// Remove prune_size elements from cache
+// Remove pruneSize elements from cache
 func (c *LRUCache) prune() {
 	for x:=c.pruneSize; x>0; x-- {
 		if _, _, ok := c.cache.PopFirst(); !ok {
@@ -167,7 +170,7 @@ func (c *LRUCache) Len() (size int){
 }
 
 
-// Get key value, if it is not available returns nil
+// Get the cached value, if not available use the lookup function.
 func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 	c.Lock()
 	
@@ -198,8 +201,8 @@ func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 }
 
 
-// Set or update key value, return true the cache was full and some other key
-// was purged to make space.
+// Set or update key value, returns true if the cache was pruned to make space
+// for a new key.
 func (c *LRUCache) Set(key interface{}, value interface{}) (purged bool){
 	c.Lock()
 
