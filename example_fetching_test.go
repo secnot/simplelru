@@ -36,7 +36,7 @@ func mockDBFetch(key interface{}) (value interface{}, ok bool) {
 
 
 // Demostrates how to create a LRUCache with fetching functionality.
-func ExampleNewLookupLRUCache() {
+func ExampleNewFetchingLRUCache() {
 
 	cache := simplelru.NewFetchingLRUCache(
 		maxCacheSize,
