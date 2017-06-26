@@ -110,19 +110,19 @@ func (c *LRUCache) goFetchWorkerFunc() {
 // New LRUCache with fetching to retrieve missing keys
 func NewFetchingLRUCache(size int, pruneSize int, 
 					   fetcher FetchFunc, 
-					   fetchWorkers uint16,  
+					   fetchWorkers uint32,  
 					   fetchQueueSize uint32) *LRUCache {
 	if size < 1 {
-		panic("NewLookupLRUCache: min cache size is 1")
+		panic("NewFetchingLRUCache: min cache size is 1")
 	}
 	if pruneSize < 1 {
-		panic("NewLookupLRUCache: min prune size is 1")
+		panic("NewFetchingLRUCache: min prune size is 1")
 	}
 	if fetcher != nil && fetchWorkers < 1 {
-		panic("NewLookupLRUCache: When there is a lookup function the min worker pool size is 1")
+		panic("NewFetchingLRUCache: The min worker pool size is 1")
 	}
 	if fetcher != nil && fetchQueueSize < 1{
-		panic("NewLookupLRUCache: When there is a lookup function the min lookut queue size is 1")
+		panic("NewFetchingLRUCache: The min fetch job queue size is 1")
 	}
 
 	cache := &LRUCache {
@@ -136,9 +136,11 @@ func NewFetchingLRUCache(size int, pruneSize int,
 		fetchQ: make(chan interface{}, fetchQueueSize),
 	}
 
-	for i := uint16(0); i < fetchWorkers; i++ {
-		cache.wg.Add(1)
-		go cache.goFetchWorkerFunc()
+	if fetcher != nil {
+		for i := uint32(0); i < fetchWorkers; i++ {
+			cache.wg.Add(1)
+			go cache.goFetchWorkerFunc()
+		}
 	}
 
 	return cache
