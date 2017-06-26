@@ -35,7 +35,7 @@ func mockDBLookup(key interface{}) (value interface{}, ok bool) {
 
 
 // ExampleNewLookupLRUCache demostrates how to create a LRUCache with lookup functionality.
-func Example_NewLookupLRUCache() {
+func ExampleLRUCache_NewLookupLRUCache() {
 
 	cache := simplelru.NewLookupLRUCache(
 		maxCacheSize,
