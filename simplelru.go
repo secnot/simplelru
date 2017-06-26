@@ -7,19 +7,18 @@ import (
 )
 
 // LookupFunc is used to loook up missing values when there is a miss
-type LookupFunc  func (key interface{}) (value interface{}, ok bool)
+type FetchFunc  func (key interface{}) (value interface{}, ok bool)
 
 
 
-
-type lookupRequest struct {
+type fetchRequest struct {
 	value interface {}
 	ok bool
 	ready chan struct{} //Close when request is ready
 }
 
-func newLookupRequest() *lookupRequest{
-	return &lookupRequest{
+func newFetchRequest() *fetchRequest{
+	return &fetchRequest{
 		value: nil,
 		ok: false,
 		ready: make(chan struct{}),
@@ -49,55 +48,57 @@ type LRUCache struct{
 	missCount uint64
 
 	// Lookup function for missing keys
-	lookup LookupFunc
+	fetcher FetchFunc
 
-	// Keys waiting for lookup
-	lookupM map[interface{}]*lookupRequest
-	lookupQ chan interface{} // lookup request key queue
+	// Map and queue of keys waiting to be fetched
+	fetchM map[interface{}]*fetchRequest
+	fetchQ chan interface{} // lookup request key queue
 }
 
 
-// Lookup pool worker function
-func goRequestLookupFunc(c *LRUCache) {
+// Value fetching worker goroutine
+func (c *LRUCache) goFetchWorkerFunc() {
 
 	defer c.wg.Done()	
 	for {
 		// Next key for lookup
-		key, ok := <-c.lookupQ
+		key, ok := <-c.fetchQ
 		if !ok {
 			return // Received exit signal
 		}
 
-		// Check the request is still in lookupM and wasn't removed by a Set call
+		// Check the request for the keys is still waiting and hasn't been 
+		// removed by a Set call
 		c.Lock()
-		if _, ok := c.lookupM[key]; !ok {
+		if _, ok := c.fetchM[key]; !ok {
 			c.Unlock()
 			continue
 		}
 		c.Unlock()
 
-		// Use lookup function
-		value, lookupOk := c.lookup(key)
-		if !lookupOk {
+		// Use fetch function
+		value, fetchOk := c.fetcher(key)
+		if !fetchOk {
 			// If the lookup failed discard the value as a precaution
 			value = nil
 		}
 
-		// Check once more if the request was removed from the lookupM,
-		// if not, set the value and signal waiting routines
+		// Check once more if the request was removed from fetchM,
+		// if not, set the value and signal waiting goroutines
 		c.Lock()
-		if request, stillWaiting := c.lookupM[key]; stillWaiting { 	
+		if request, stillWaiting := c.fetchM[key]; stillWaiting { 	
 			request.value = value
-			request.ok = lookupOk
+			request.ok = fetchOk
 
-			// All blocked Get methods should keep a reference
-			delete(c.lookupM, key)
+			// All blocked Get methods keep a reference, so it can
+			// be deleted safely
+			delete(c.fetchM, key)
 
 			// Clossing the channel marks the request finished
 			close(request.ready)
 
-			// Only update the cache if the lookup was successful
-			if lookupOk {
+			// Only update the cache if fetching was successful
+			if fetchOk {
 				c.cache.Set(key, value)
 			}
 		} 
@@ -106,22 +107,22 @@ func goRequestLookupFunc(c *LRUCache) {
 }
 
 
-// New LRUCache with lookup
-func NewLookupLRUCache(size int, pruneSize int, 
-					   lookup LookupFunc, 
-					   lookupWorkers uint16,  
-					   lookupQueueSize uint32) *LRUCache {
+// New LRUCache with fetching to retrieve missing keys
+func NewFetchingLRUCache(size int, pruneSize int, 
+					   fetcher FetchFunc, 
+					   fetchWorkers uint16,  
+					   fetchQueueSize uint32) *LRUCache {
 	if size < 1 {
-		panic("NewLookupLRUCache: min size is 1")
+		panic("NewLookupLRUCache: min cache size is 1")
 	}
 	if pruneSize < 1 {
-		panic("NewLookupLRUCache: min pruneSize is 1")
+		panic("NewLookupLRUCache: min prune size is 1")
 	}
-	if lookup != nil && lookupWorkers == 0 {
-		panic("NewLookupLRUCache: If a lookup function is provided the min pool size is 1")
+	if fetcher != nil && fetchWorkers < 1 {
+		panic("NewLookupLRUCache: When there is a lookup function the min worker pool size is 1")
 	}
-	if lookup != nil && lookupQueueSize < 1{
-		panic("NewLookupLRUCache: If a lookup function is provided the min queue size is 1")
+	if fetcher != nil && fetchQueueSize < 1{
+		panic("NewLookupLRUCache: When there is a lookup function the min lookut queue size is 1")
 	}
 
 	cache := &LRUCache {
@@ -130,14 +131,14 @@ func NewLookupLRUCache(size int, pruneSize int,
 		pruneSize: pruneSize,
 		hitCount: 0,
 		missCount: 0,
-		lookup: lookup,
-		lookupM: make(map[interface{}]*lookupRequest),
-		lookupQ: make(chan interface{}, lookupQueueSize),
+		fetcher: fetcher,
+		fetchM: make(map[interface{}]*fetchRequest),
+		fetchQ: make(chan interface{}, fetchQueueSize),
 	}
 
-	for i := uint16(0); i < lookupWorkers; i++ {
+	for i := uint16(0); i < fetchWorkers; i++ {
 		cache.wg.Add(1)
-		go goRequestLookupFunc(cache)
+		go cache.goFetchWorkerFunc()
 	}
 
 	return cache
@@ -147,7 +148,7 @@ func NewLookupLRUCache(size int, pruneSize int,
 
 // New LRUCache without lookup function
 func NewLRUCache(size int, pruneSize int) *LRUCache {
-	return NewLookupLRUCache(size, pruneSize, nil, 0, 0)
+	return NewFetchingLRUCache(size, pruneSize, nil, 0, 0)
 }
 
 
@@ -170,7 +171,7 @@ func (c *LRUCache) Len() (size int){
 }
 
 
-// Get the cached value, if not available use the lookup function.
+// Get the key value, if not cached use the fetch function if available.
 func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 	c.Lock()
 	
@@ -178,14 +179,14 @@ func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 		c.hitCount++
 		c.cache.MoveLast(key)
 		c.Unlock()
-	} else if c.lookup != nil {
+	} else if c.fetcher != nil {
 		c.missCount++
-		request, exists := c.lookupM[key]
+		request, exists := c.fetchM[key]
 		if !exists { // Start new request
-			request = newLookupRequest()
-			c.lookupM[key] = request
+			request = newFetchRequest()
+			c.fetchM[key] = request
 			c.Unlock()
-			c.lookupQ <- key // Queue key for lookup
+			c.fetchQ <- key // Queue key for fetch
 		} else {
 			c.Unlock()
 		}
@@ -202,35 +203,38 @@ func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 
 
 // Set or update key value, returns true if the cache was pruned to make space
-// for a new key.
-func (c *LRUCache) Set(key interface{}, value interface{}) (purged bool){
+// for a new key. Set has priority over fetched values, so if the key set is
+// being fetched, all goroutines waiting will wakeup and receive the 'setted' value
+// while the fetch results are discarded.
+func (c *LRUCache) Set(key interface{}, value interface{}) (pruned bool){
 	c.Lock()
 
 	inCache := false
-	purged = false
 
 	if _, inCache = c.cache.Get(key); inCache { 
 		// Already in cache, just update
 		c.cache.MoveLast(key)
-	} else if request, inLookup := c.lookupM[key]; inLookup {
+	} else if request, fetching := c.fetchM[key]; fetching {
 		// In lookup queue (but not in cache)
 		request.value = value
 		request.ok = true	
 		
-		// All blocked Get methods should keep a reference
-		delete(c.lookupM, key)
+		// All blocked Get methods keep a reference so it can be deleted safely
+		delete(c.fetchM, key)
 
 		// Clossing the channel marks request finished
 		close(request.ready)
 	}
 	
-	if !inCache && c.cache.Len() == c.size {
+	if !inCache && c.cache.Len() >= c.size {
 		c.prune()
-		purged = true
+		pruned = true
+	} else {
+		pruned = false
 	}
 
 	// The new value is set after the purge to assure it is not deleted 
-	// in very small caches
+	// when the cache size is one, or the prune size is greater than cache size
 	c.cache.Set(key, value)
 	c.Unlock()
 	return
@@ -245,7 +249,7 @@ func (c *LRUCache) Remove(key interface{}) {
 }
 
 
-// Remove oldest key from cache
+// Remove oldest/least used key from cache
 func (c *LRUCache) RemoveOldest() {
 	c.Lock()
 	c.cache.PopFirst()
@@ -253,7 +257,7 @@ func (c *LRUCache) RemoveOldest() {
 }
 
 
-// Get key value without updating cache, stats, or triggering a lookup
+// Get key value without updating cache, stats, or triggering a fetch
 func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool){
 	c.Lock()
 	value, ok = c.cache.Get(key)
@@ -277,10 +281,10 @@ func (c *LRUCache) Purge() {
 }
 
 
-// Stop all lookup routines
+// Stop all fetch routines
 func (c *LRUCache) Close() {
 	c.Lock()
-	close(c.lookupQ)
+	close(c.fetchQ)
 	c.Unlock()
 	c.wg.Wait()
 }
