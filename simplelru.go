@@ -107,7 +107,13 @@ func (c *LRUCache) goFetchWorkerFunc() {
 }
 
 
-// New LRUCache with fetching to retrieve missing keys
+// New LRUCache with fetch function to retrieve keys on cache misses.
+// 
+// If fetchWorkers is greater than one, fetch function must be 
+// concurrency-safe.
+//
+// fetchQueueSize must be selected depending on the number of workers and 
+// expected concurrent cache misses.
 func NewFetchingLRUCache(size int, pruneSize int, 
 					   fetcher FetchFunc, 
 					   fetchWorkers uint32,  
