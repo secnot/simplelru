@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// LookupFunc is used to loook up missing values when there is a miss
+// Used to loook up missing values when there is a miss
 type FetchFunc  func (key interface{}) (value interface{}, ok bool)
 
 
@@ -27,7 +27,6 @@ func newFetchRequest() *fetchRequest{
 
 
 type LRUCache struct{
-
 	// Wait for lookup task exits
 	wg sync.WaitGroup
 
@@ -107,22 +106,28 @@ func (c *LRUCache) goFetchWorkerFunc() {
 }
 
 
-// New LRUCache with fetching to retrieve missing keys
+// New LRUCache with fetch function to retrieve keys on cache misses.
+// 
+// If fetchWorkers is greater than one, fetch function must be 
+// concurrency-safe.
+//
+// fetchQueueSize must be selected depending on the number of workers and 
+// expected concurrent cache misses.
 func NewFetchingLRUCache(size int, pruneSize int, 
 					   fetcher FetchFunc, 
-					   fetchWorkers uint16,  
+					   fetchWorkers uint32,  
 					   fetchQueueSize uint32) *LRUCache {
 	if size < 1 {
-		panic("NewLookupLRUCache: min cache size is 1")
+		panic("NewFetchingLRUCache: min cache size is 1")
 	}
 	if pruneSize < 1 {
-		panic("NewLookupLRUCache: min prune size is 1")
+		panic("NewFetchingLRUCache: min prune size is 1")
 	}
 	if fetcher != nil && fetchWorkers < 1 {
-		panic("NewLookupLRUCache: When there is a lookup function the min worker pool size is 1")
+		panic("NewFetchingLRUCache: The min worker pool size is 1")
 	}
 	if fetcher != nil && fetchQueueSize < 1{
-		panic("NewLookupLRUCache: When there is a lookup function the min lookut queue size is 1")
+		panic("NewFetchingLRUCache: The min fetch job queue size is 1")
 	}
 
 	cache := &LRUCache {
@@ -136,9 +141,11 @@ func NewFetchingLRUCache(size int, pruneSize int,
 		fetchQ: make(chan interface{}, fetchQueueSize),
 	}
 
-	for i := uint16(0); i < fetchWorkers; i++ {
-		cache.wg.Add(1)
-		go cache.goFetchWorkerFunc()
+	if fetcher != nil {
+		for i := uint32(0); i < fetchWorkers; i++ {
+			cache.wg.Add(1)
+			go cache.goFetchWorkerFunc()
+		}
 	}
 
 	return cache
@@ -273,7 +280,8 @@ func (c *LRUCache) Contains(key interface{}) bool{
 }
 
 
-// Purge all cache contents (without reseting stats)
+// Purge all cache contents (without reseting stats). Items currently 
+// being fetched are not purged.
 func (c *LRUCache) Purge() {
 	c.Lock()
 	c.cache = orderedmap.NewOrderedMap()
