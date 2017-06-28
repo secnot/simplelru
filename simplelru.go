@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// LookupFunc is used to loook up missing values when there is a miss
+// Used to loook up missing values when there is a miss
 type FetchFunc  func (key interface{}) (value interface{}, ok bool)
 
 
@@ -27,7 +27,6 @@ func newFetchRequest() *fetchRequest{
 
 
 type LRUCache struct{
-
 	// Wait for lookup task exits
 	wg sync.WaitGroup
 
@@ -281,7 +280,8 @@ func (c *LRUCache) Contains(key interface{}) bool{
 }
 
 
-// Purge all cache contents (without reseting stats)
+// Purge all cache contents (without reseting stats). Items currently 
+// being fetched are not purged.
 func (c *LRUCache) Purge() {
 	c.Lock()
 	c.cache = orderedmap.NewOrderedMap()

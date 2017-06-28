@@ -1,11 +1,19 @@
 # simplelru
+
 LRU Cache implementation written Go
 
+## Installation
 
+Download the package and its only dependency:
+
+```bash
+go get github.com/secnot/orderedmap
+go get github.com/secnot/simplerlu
+```
 
 ## Usage
 
-Basic LRU cache example
+A basic LRU cache:
 
 ```go
 package main
@@ -39,7 +47,7 @@ func main() {
 }
 ```
 
-Or on how to use a fetch function on cache misses:
+Or with a function to fetch the value from the source on cache misses:
 
 ```go
 package main
@@ -59,7 +67,7 @@ const (
 )
 
 
-// Simulated db query, with delay
+// Simulated db query, with delay (concurrency-safe)
 func mockDBFetch(key interface{}) (value interface{}, ok bool) {
 	time.Sleep(20 * time.Millisecond)
 	return fmt.Sprintf("query result: %v", key), true
@@ -76,15 +84,166 @@ func main() {
 		fetchQueueSize)
 
 	// If a key is not cached there is a fetch
-	value, _ := cache.Get("John")
-	fmt.Println(value) // query result: John
+	value, _ := cache.Get(1) // Ignore errors
+	fmt.Println(value) // > query result: 1
 
 	// No fetch for cached keys
-	cache.Set("Mary", "Mary is cached")
-	value, _ = cache.Get("Mary")
-	fmt.Println(value) // Mary is cached
+	cache.Set(2, "2 is cached")
+	value, _ = cache.Get(2) // Ignore errors
+	fmt.Println(value) // > 2 is cached
 }
 ``` 
 
 
-## TODO: 
+## Documentation
+
+## TYPE
+
+```go
+type FetchFunc func(key interface{}) (value interface{}, ok bool)
+    Used to loook up missing values when there is a miss
+```
+
+## TYPE
+
+```go
+type LRUCache struct {
+    // contains filtered or unexported fields
+}
+```
+
+#### func NewFetchingLRUCache
+
+```go
+func NewFetchingLRUCache(size int, pruneSize int,
+    fetcher FetchFunc,
+    fetchWorkers uint32,
+    fetchQueueSize uint32) *LRUCache
+    New LRUCache with fetch function to retrieve keys on cache misses.
+```
+
+If fetchWorkers is greater than one, fetch function must be
+concurrency-safe.
+
+fetchQueueSize must be selected depending on the number of workers and
+expected concurrent cache misses.
+
+
+#### func NewLRUCache
+
+```go
+func NewLRUCache(size int, pruneSize int) *LRUCache
+```
+
+New LRUCache without lookup function
+
+
+#### func (*LRUCache) Close
+
+```go
+func (c *LRUCache) Close()
+```
+
+Stop all fetch routines
+
+
+#### func (*LRUCache) Contains
+
+```go
+func (c *LRUCache) Contains(key interface{}) bool
+```
+
+Returns true if the cache contains the key (no side-effects)
+
+
+#### func (*LRUCache) Get
+
+```go
+func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool)
+```
+    
+Get the key value, if not cached use the fetch function if available.
+
+#### func (*LRUCache) Len
+
+```go
+func (c *LRUCache) Len() (size int)
+```
+
+Return number of keys in cache
+
+
+#### func (*LRUCache) Peek
+
+```go
+func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool)
+```
+    
+Get key value without updating cache, stats, or triggering a fetch
+
+
+#### func (*LRUCache) Purge
+
+```go
+func (c *LRUCache) Purge()
+```
+
+Purge all cache contents (without reseting stats). Items currently being
+fetched are not purged.
+
+
+#### func (*LRUCache) Remove
+
+```go
+func (c *LRUCache) Remove(key interface{})
+```    
+
+Remove key from cache
+
+
+#### func (*LRUCache) RemoveOldest
+
+```go
+func (c *LRUCache) RemoveOldest()
+```    
+
+Remove Least Recently Used key from cache
+
+
+#### func (*LRUCache) ResetStats
+
+```go
+func (c *LRUCache) ResetStats
+```
+
+Reset cache stats
+
+
+#### func (*LRUCache) Set
+
+```go
+func (c *LRUCache) Set(key interface{}, value interface{}) (pruned bool)
+```
+    
+Set or update key value, returns true if the cache was pruned to make
+space for a new key. Set has priority over fetched values, so if the key
+set is being fetched, all goroutines waiting will wakeup and receive the
+'setted' value while the fetch results are discarded.
+
+
+#### func (*LRUCache) Stats
+
+```go
+func (c *LRUCache) Stats() (hit uint64, miss uint64)
+```    
+
+Return cache stats
+
+
+#### func (*LRUCache) String
+
+```go
+func (c *LRUCache) String() string
+```
+    
+Stringer interface
