@@ -1,6 +1,11 @@
-# simplelru
+# SimpleLRU  [![Build Status](https://travis-ci.org/secnot/simplelru.svg?branch=master)](https://travis-ci.org/secnot/simplelru) [![GoDoc](https://godoc.org/github.com/secnot/simplelru?status.svg)](http://godoc.org/github.com/secnot/simplelru)
 
-LRU Cache implementation written Go
+LRU Cache implementation written in Go.
+
+- Concurrency-safe
+- Supports auto-fetching for items on cache miss.
+- 100% Test coverage
+
 
 ## Installation
 
@@ -47,7 +52,7 @@ func main() {
 }
 ```
 
-Or with a function to fetch the value from the source on cache misses:
+Or with a function to fetch the value from another source on cache miss:
 
 ```go
 package main
@@ -101,8 +106,10 @@ func main() {
 
 ```go
 type FetchFunc func(key interface{}) (value interface{}, ok bool)
-    Used to loook up missing values when there is a miss
 ```
+
+Type of functions to fetch missing values when there is a miss.
+
 
 ## TYPE
 
@@ -119,14 +126,15 @@ func NewFetchingLRUCache(size int, pruneSize int,
     fetcher FetchFunc,
     fetchWorkers uint32,
     fetchQueueSize uint32) *LRUCache
-    New LRUCache with fetch function to retrieve keys on cache misses.
-```
+```    
+	
+New LRUCache with optional fetch function to retrieve keys on cache miss.
 
-If fetchWorkers is greater than one, fetch function must be
-concurrency-safe.
+- fetchWorkers: Fetch worker pool size, if it's greater than one fetch function 
+must be concurrency-safe.
 
-fetchQueueSize must be selected depending on the number of workers and
-expected concurrent cache misses.
+- fetchQueueSize: Worker pool job queue, must be tunned for the number of workers 
+and expected concurrent cache misses.
 
 
 #### func NewLRUCache
