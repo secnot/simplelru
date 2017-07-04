@@ -139,6 +139,49 @@ func TestBasicFetch(t *testing.T) {
 }
 
 
+
+// Test resizing cache with pending fetchs
+func TestResizingDuringFetch(t *testing.T) {
+	storage := newStorage(1000)
+
+	// fetch function with simulated delay
+	fetcher := func (key interface{}) (value interface{}, ok bool){
+		time.Sleep(200 * time.Millisecond)
+		return storage.Get(key)
+	}
+
+	cache := NewFetchingLRUCache(100, 10, fetcher, 2, 10)
+
+	for i := 1000; i < 1200; i++ {
+		cache.Set(i, i)
+	}
+
+	concurrentGet := func(cache *LRUCache, key interface{}, result *interface{}) {
+		value, _ := cache.Get(key)
+		*result = value
+	}
+
+	var result1 interface{}
+	var result2 interface{}
+
+	go concurrentGet(cache, 10, &result1)
+	go concurrentGet(cache, 20, &result2)
+
+	cache.Resize(1, 1)
+
+	// Wait until concurrentGet is finished, to check it was successful
+	time.Sleep(1000*time.Millisecond)
+	if result1.(int) !=  10 || result2.(int) != 20 {
+		t.Error("Unexpected Get response during resizing")
+	}
+
+	// TODO: Wait until fetch pruning is working
+	//if cache.Len() != 1 {
+	//	t.Error("Cache resize wasn't successful", cache.Len())
+	//}
+}
+
+
 // Test concurrent Get calls for the same key generate only one fetch
 func TestConcurrentGet(t *testing.T) {
 	storage := newStorage(1000)

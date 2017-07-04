@@ -99,6 +99,7 @@ func (c *LRUCache) goFetchWorkerFunc() {
 			// Only update the cache if fetching was successful
 			if fetchOk {
 				c.cache.Set(key, value)
+				// TODO: Prune cache if needed
 			}
 		} 
 		c.Unlock()
@@ -158,6 +159,29 @@ func NewLRUCache(size int, pruneSize int) *LRUCache {
 	return NewFetchingLRUCache(size, pruneSize, nil, 0, 0)
 }
 
+
+
+// Set new max cache size, if its smaller than the current size
+// it will be pruned to size. (ignores pruneSize)
+func (c *LRUCache) Resize(size int, pruneSize int) {
+	if size < 1 {
+		panic("LRUCache: min cache size is 1")
+	}
+	if pruneSize < 1 {
+		panic("LRUCache: min prune size is 1")
+	}
+	
+	c.Lock()
+	c.size = size
+	c.pruneSize = pruneSize
+	if c.cache.Len() > c.size {
+		toPrune := c.cache.Len() - c.size
+		for i := 0; i < toPrune; i++ {
+			c.cache.PopFirst()
+		}
+	}
+	c.Unlock()
+}
 
 // Remove pruneSize elements from cache
 func (c *LRUCache) prune() {
