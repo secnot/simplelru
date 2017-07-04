@@ -186,6 +186,87 @@ func TestSetPrune(t *testing.T) {
 }
 
 
+// Test resizing lrucache
+func TestResize(t *testing.T) {
+	
+	// Resize Smaller
+	//////////////////
+	cache := NewLRUCache(100, 5)
+	for i := 0; i< 100; i++ {
+		cache.Set(i, i)
+	}
+
+	if cache.Len() != 100 {
+		t.Error("Cache should be full")
+	}
+
+	// Check new size and correct pruneSize
+	cache.Resize(10, 2)
+	if cache.Len() != 10 {
+		t.Error("Cache resize failed")
+	}
+
+	cache.Set(1000, 1000)
+	if cache.Len() != 9 {
+		t.Error("Used wrong pruneSize")
+	}
+
+	// Resize Larger
+	/////////////////
+	cache = NewLRUCache(100, 5)
+	for i := 0; i< 100; i++ {
+		cache.Set(i, i)
+	}
+
+	if cache.Len() != 100 {
+		t.Error("Cache should be full")
+	}
+
+	// Check new size and correct pruneSize
+	cache.Resize(1000, 100)
+	if cache.Len() != 100 {
+		t.Error("Cache resize failed")
+	}
+
+	// Fill to max and test pruneSize
+	for i := 100; i < 1000; i++ {
+		cache.Set(i, i)
+	}
+	if cache.Len() != 1000 {
+		t.Error("Cache resize failed")
+	}
+
+	cache.Set(2000, 2000) // This should generate a prune
+	if cache.Len() != 901 {
+		t.Error("Used Wrong pruneSize")
+	}
+
+	// Resize 1
+	////////////
+	cache = NewLRUCache(100, 5)
+	for i := 0; i< 100; i++ {
+		cache.Set(i, i)
+	}
+
+	cache.Resize(1, 1)
+
+	if cache.Len() != 1 {
+		t.Error("Cache Resize failed")
+	}
+
+	cache.Set(2000, 2000)
+	if cache.Len() != 1 {
+		t.Error("Cache Resize failed")
+	}
+
+	value, ok := cache.Get(2000)
+	if value.(int) != 2000 || !ok {
+		t.Error("Shouldn't have failed")
+	}
+
+}
+
+
 // Test Remove basic operation
 func TestRemove(t *testing.T) {
 	cache := NewLRUCache(100, 10)
@@ -403,13 +484,19 @@ func TestConcurrency(t *testing.T) {
 		time.Sleep(delay*time.Millisecond)
 		cache.Set(key, value)
 	}
+	concurrentResize := func(cache *LRUCache, size int, pruneSize int, delay time.Duration) {
+		time.Sleep(delay*time.Millisecond)
+		cache.Resize(size, pruneSize)
+	}
 
 	// Spawn routines updating/creating/reading
 	for i := 0 ; i < 50; i++ {
 		go concurrentGet(cache, i, 5)
 		go concurrentPeek(cache, i, 3)
+		go concurrentResize(cache, 1000, 3, 2)
 		go concurrentSet(cache, i, i+10, 8)
 		go concurrentGet(cache, i, 4)
+		go concurrentResize(cache, 300, 30, 5)
 		go concurrentPeek(cache, i, 10)
 		go concurrentSet(cache, i+100, i+200, 12)
 	}
