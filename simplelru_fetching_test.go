@@ -175,10 +175,10 @@ func TestResizingDuringFetch(t *testing.T) {
 		t.Error("Unexpected Get response during resizing")
 	}
 
-	// TODO: Wait until fetch pruning is working
-	//if cache.Len() != 1 {
-	//	t.Error("Cache resize wasn't successful", cache.Len())
-	//}
+	// Wait until fetch pruning is working
+	if cache.Len() != 1 {
+		t.Error("Cache resize wasn't successful", cache.Len())
+	}
 }
 
 
@@ -561,3 +561,43 @@ func TestFetchingFullChannel(t *testing.T) {
 
 	cache.Close()
 }
+
+
+// Test cache is pruned when a fetch request fills the cache 
+func TestFetchingPrune(t *testing.T) {
+
+	storage := newStorage(1000)
+
+	// fetch func has random 0-9ms delay
+	fetcher := func (key interface{}) (value interface{}, ok bool){
+		time.Sleep(time.Duration(key.(int)%3)* time.Millisecond)
+		value, ok = storage.Get(key)
+		return
+	}
+
+	cache := NewFetchingLRUCache(5, 1, fetcher, 8, 10)
+
+	
+	concurrentGet := func(cache *LRUCache, key interface{}) {
+		cache.Get(key)
+	}	
+	
+	go concurrentGet(cache, 1)
+	go concurrentGet(cache, 2)
+	go concurrentGet(cache, 3)
+	go concurrentGet(cache, 4)
+	go concurrentGet(cache, 5)
+	go concurrentGet(cache, 6)
+	go concurrentGet(cache, 7)
+	go concurrentGet(cache, 8)
+	go concurrentGet(cache, 9)
+	go concurrentGet(cache, 10)
+
+	time.Sleep(1000*time.Millisecond)
+
+	if cache.Len() != 5 {
+		t.Error("Cache wasn't pruned by fetch worker", cache.Len())
+	}
+}
+
+

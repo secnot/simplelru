@@ -98,8 +98,10 @@ func (c *LRUCache) goFetchWorkerFunc() {
 
 			// Only update the cache if fetching was successful
 			if fetchOk {
+				if c.cache.Len() >= c.size {
+					c.prune()
+				}
 				c.cache.Set(key, value)
-				// TODO: Prune cache if needed
 			}
 		} 
 		c.Unlock()
@@ -344,6 +346,5 @@ func (c *LRUCache) ResetStats() {
 func (c *LRUCache) String() string {
 	c.Lock()
 	defer c.Unlock()
-	return c.cache.String()
 	return fmt.Sprintf("LRUCache(%v, %v)", c.size, c.cache.Len())
 }
