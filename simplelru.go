@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Used to loook up missing values when there is a miss
+// FetchFunc is used to look up missing values when there is a cache miss.
 type FetchFunc  func (key interface{}) (value interface{}, ok bool)
 
 
@@ -26,6 +26,9 @@ func newFetchRequest() *fetchRequest{
 }
 
 
+
+// LRUCache is a standard implementation of a LRU cache with an optional
+// worker pool for fetching missing values.
 type LRUCache struct{
 	// Wait for lookup task exits
 	wg sync.WaitGroup
@@ -55,7 +58,7 @@ type LRUCache struct{
 }
 
 
-// Value fetching worker goroutine
+// goFetchWorkerFucn is the value fetching worker goroutine
 func (c *LRUCache) goFetchWorkerFunc() {
 
 	defer c.wg.Done()	
@@ -109,7 +112,8 @@ func (c *LRUCache) goFetchWorkerFunc() {
 }
 
 
-// New LRUCache with fetch function to retrieve keys on cache misses.
+// NewFetchingLRUCache creates a LRUCache with fetch function to retrieve keys on 
+// cache misses.
 // 
 // If fetchWorkers is greater than one, fetch function must be 
 // concurrency-safe.
@@ -156,14 +160,14 @@ func NewFetchingLRUCache(size int, pruneSize int,
 }
 
 
-// New LRUCache without lookup function
+// NewLRUCache allocate LRUCache without lookup function
 func NewLRUCache(size int, pruneSize int) *LRUCache {
 	return NewFetchingLRUCache(size, pruneSize, nil, 0, 0)
 }
 
 
 
-// Set new max cache size, if its smaller than the current size
+// Resize sets new max cache size, if its smaller than the current size
 // it will be pruned to size. (ignores pruneSize)
 func (c *LRUCache) Resize(size int, pruneSize int) {
 	if size < 1 {
@@ -185,7 +189,7 @@ func (c *LRUCache) Resize(size int, pruneSize int) {
 	c.Unlock()
 }
 
-// Remove pruneSize elements from cache
+// prune Remove pruneSize elements from cache
 func (c *LRUCache) prune() {
 	for x:=c.pruneSize; x>0; x-- {
 		if _, _, ok := c.cache.PopFirst(); !ok {
@@ -195,7 +199,7 @@ func (c *LRUCache) prune() {
 }
 
 
-// Return number of keys in cache
+// Len returns the number of cached items
 func (c *LRUCache) Len() (size int){
 	c.Lock()
 	size = c.cache.Len()
@@ -204,7 +208,7 @@ func (c *LRUCache) Len() (size int){
 }
 
 
-// Get the key value, if not cached use the fetch function if available.
+// Get a key value, if not cached use the fetch function if available.
 func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool){
 	c.Lock()
 	
@@ -282,7 +286,7 @@ func (c *LRUCache) Remove(key interface{}) {
 }
 
 
-// Remove oldest/least used key from cache
+// RemoveOldest removes the least recently used item from cache
 func (c *LRUCache) RemoveOldest() {
 	c.Lock()
 	c.cache.PopFirst()
@@ -290,7 +294,8 @@ func (c *LRUCache) RemoveOldest() {
 }
 
 
-// Get key value without updating cache, stats, or triggering a fetch
+// Peek allows to get an itme value without updating the cache, stats, 
+// or triggering a fetch
 func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool){
 	c.Lock()
 	value, ok = c.cache.Get(key)
@@ -299,7 +304,7 @@ func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool){
 }
 
 
-// Returns true if the cache contains the key (no side-effects)
+// Contains returns true if the cache contains the key (no side-effects)
 func (c *LRUCache) Contains(key interface{}) bool{
 	_, ok := c.Peek(key)
 	return ok
@@ -315,7 +320,7 @@ func (c *LRUCache) Purge() {
 }
 
 
-// Stop all fetch routines
+// Close stops all fetch routines
 func (c *LRUCache) Close() {
 	c.Lock()
 	close(c.fetchQ)
@@ -324,7 +329,7 @@ func (c *LRUCache) Close() {
 }
 
 
-// Return cache stats
+// Stats returns cache hit and miss stats since the last reset
 func (c *LRUCache) Stats() (hit uint64, miss uint64) {
 	c.Lock()
 	hit, miss = c.hitCount, c.missCount
@@ -333,7 +338,7 @@ func (c *LRUCache) Stats() (hit uint64, miss uint64) {
 }
 
 
-// Reset cache stats
+// ResetStats set stats to 0
 func (c *LRUCache) ResetStats() {
 	c.Lock()
 	c.hitCount  = 0
