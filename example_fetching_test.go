@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"."
-	//"github.com/secnot/simplelru"
+	"github.com/secnot/simplelru"
 )
 
 const (
