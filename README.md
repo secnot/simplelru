@@ -1,6 +1,6 @@
-# SimpleLRU  [![Build Status](https://travis-ci.org/secnot/simplelru.svg?branch=master)](https://travis-ci.org/secnot/simplelru) [![GoDoc](https://godoc.org/github.com/secnot/simplelru?status.svg)](http://godoc.org/github.com/secnot/simplelru)
+# SimpleLRU  [![Build Status](https://travis-ci.org/secnot/simplelru.svg?branch=master)](https://travis-ci.org/secnot/simplelru) [![GoDoc](https://godoc.org/github.com/secnot/simplelru?status.svg)](http://godoc.org/github.com/secnot/simplelru) [![Go Report Card](https://goreportcard.com/badge/github.com/secnot/simplelru)](https://goreportcard.com/report/github.com/secnot/simplelru) 
 
-LRU Cache implementation written in Go.
+A LRU Cache (Least Recently Used) written in Go.
 
 - Concurrency-safe
 - Supports auto-fetching for items on cache miss.
@@ -227,7 +227,7 @@ func (c *LRUCache) ResetStats()
 Reset cache stats
 
 
-## func (*LRUCache) Resize
+#### func (*LRUCache) Resize
 
 ```go
 func (c *LRUCache) Resize(size int, pruneSize int)
