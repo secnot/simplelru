@@ -1,8 +1,8 @@
 package simplelru_test
 
 import (
-	"fmt"
 	"."
+	"fmt"
 	//"github.com/secnot/simplelru"
 )
 
