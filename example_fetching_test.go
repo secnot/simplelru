@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/secnot/simplelru"
+	"."
+	//"github.com/secnot/simplelru"
 )
 
 const (
@@ -22,7 +23,6 @@ const (
 	fetchQueueSize = fetchWorkers * 2
 )
 
-
 // Simulated db query, if there is more than one worker in the pool the
 // function must be concurrency-safe. (type: FetchFunc)
 func mockDBFetch(key interface{}) (value interface{}, ok bool) {
@@ -33,7 +33,6 @@ func mockDBFetch(key interface{}) (value interface{}, ok bool) {
 	// is returned and stored into the cache.
 	return fmt.Sprintf("query result: %v", key), true
 }
-
 
 // Demostrates how to create a LRUCache with fetching functionality.
 func ExampleNewFetchingLRUCache() {

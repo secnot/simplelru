@@ -317,7 +317,7 @@ func TestPeek(t *testing.T) {
 		t.Error("Unexpected Error")
 	}
 
-	if new_hit, new_miss := cache.Stats(); new_hit != hit || new_miss != miss {
+	if newHit, newMiss := cache.Stats(); newHit != hit || newMiss != miss {
 		t.Error("Peek updated cache hit/miss stats")
 	}
 
@@ -353,7 +353,7 @@ func TestContains(t *testing.T) {
 		t.Error("Unexpected Error")
 	}
 
-	if new_hit, new_miss := cache.Stats(); new_hit != hit || new_miss != miss {
+	if newHit, newMiss := cache.Stats(); newHit != hit || newMiss != miss {
 		t.Error("Contains updated cache hit/miss stats")
 	}
 

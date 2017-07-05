@@ -1,10 +1,10 @@
 package simplelru_test
 
 import (
+	"."
 	"fmt"
-	"github.com/secnot/simplelru"
+	//"github.com/secnot/simplelru"
 )
-
 
 // Simple LRUCache example.
 func ExampleNewLRUCache() {
@@ -23,7 +23,7 @@ func ExampleNewLRUCache() {
 	// Adding another item to the cache will trigger a prune
 	cache.Set(3000, 5000)
 	fmt.Println(cache.Len()) //991
-	
+
 	// Now the 10 oldest items aren't cached.
 	if _, ok := cache.Get(0); !ok {
 		fmt.Println("0 is not cached")
