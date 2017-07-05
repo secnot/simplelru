@@ -221,10 +221,20 @@ Remove Least Recently Used key from cache
 #### func (*LRUCache) ResetStats
 
 ```go
-func (c *LRUCache) ResetStats
+func (c *LRUCache) ResetStats()
 ```
 
 Reset cache stats
+
+
+## func (*LRUCache) Resize
+
+```go
+func (c *LRUCache) Resize(size int, pruneSize int)
+```
+
+Set new max cache size, if its smaller than the current size
+it will be pruned to size.
 
 
 #### func (*LRUCache) Set
