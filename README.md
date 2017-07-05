@@ -227,7 +227,7 @@ func (c *LRUCache) ResetStats()
 Reset cache stats
 
 
-## func (*LRUCache) Resize
+#### func (*LRUCache) Resize
 
 ```go
 func (c *LRUCache) Resize(size int, pruneSize int)
