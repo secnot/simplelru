@@ -158,7 +158,7 @@ func TestResizingDuringFetch(t *testing.T) {
 		lock.Unlock()
 	}
 
-	// Added a lock to avoid error messages when runing 'go test --race'
+	// Added a lock to avoid error messages when running 'go test --race'
 	var lock sync.Mutex
 	var result1 interface{}
 	var result2 interface{}
