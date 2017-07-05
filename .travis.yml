@@ -12,5 +12,3 @@ go:
 
 install:
   - go get github.com/secnot/orderedmap
-  - make
-  - make test
