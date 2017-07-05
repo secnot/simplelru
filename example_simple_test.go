@@ -2,7 +2,8 @@ package simplelru_test
 
 import (
 	"fmt"
-	"github.com/secnot/simplelru"
+	"."
+	//"github.com/secnot/simplelru"
 )
 
 // Simple LRUCache example.
