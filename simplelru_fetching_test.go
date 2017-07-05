@@ -2,79 +2,76 @@ package simplelru
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
-	"sync"
 )
-
 
 // Mock key:value storage for cache fetching (concurrency-safe)
 ////////////////////////////////////////////////////////////
 type storage struct {
-	storage map[interface{}]interface{}
+	storage     map[interface{}]interface{}
 	LookupCount int
-	lock sync.Mutex
+	lock        sync.Mutex
 }
 
-func newStorage(size int)(*storage) {
+func newStorage(size int) *storage {
 
 	s := storage{
-		storage: make(map[interface{}]interface{}),
+		storage:     make(map[interface{}]interface{}),
 		LookupCount: 0,
-		lock: sync.Mutex{},
+		lock:        sync.Mutex{},
 	}
 
-	for i := 0; i<size; i++ {
+	for i := 0; i < size; i++ {
 		s.storage[i] = i
 	}
 
 	return &s
 }
 
-func (s *storage)Get(key interface{})(value interface{}, ok bool) {
+func (s *storage) Get(key interface{}) (value interface{}, ok bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.LookupCount++
 	value, ok = s.storage[key]
 	return
 }
-func (s *storage)CallCount() int{
+func (s *storage) CallCount() int {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.LookupCount
 }
-func (s *storage)ResetCallCount(){
+func (s *storage) ResetCallCount() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.LookupCount = 0
 	return
 }
+
 //////////////////////////////////////////////////////////////////
-
-
-
 
 // Test basic fetch functionality (No concurrency or parallelism)
 func TestBasicFetch(t *testing.T) {
 	storage := newStorage(1000)
 
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(100 * time.Millisecond)
 		return storage.Get(key)
 	}
 
 	cache := NewFetchingLRUCache(100, 10, fetcher, 1, 1000)
-	
+
 	// The key is not in cache so it should fetch it from storage
 	value, ok := cache.Get(77)
 	if storage.CallCount() != 1 {
 		t.Error("Lookup function was never called")
 	}
-	if !ok || value != 77  {
+	if !ok || value != 77 {
 		t.Error(fmt.Sprintf("Expected 77, received %v", value))
 	}
 	hit, miss := cache.Stats()
-	if hit!=0 || miss!=1 {
+	if hit != 0 || miss != 1 {
 		t.Error("Stat accounting error")
 	}
 
@@ -84,50 +81,50 @@ func TestBasicFetch(t *testing.T) {
 	if storage.CallCount() != 0 {
 		t.Error("There was a fetch for a key that should be cached")
 	}
-	if !ok || value != 77  {
+	if !ok || value != 77 {
 		t.Error(fmt.Printf("Expected 77, received %v", value))
 	}
 	hit, miss = cache.Stats()
-	if hit!=1 || miss!=1 {
+	if hit != 1 || miss != 1 {
 		t.Error("Stat accounting error")
 	}
 
 	// Setting a key value overrides the fetched value
 	cache.Set(88, 8888)
 	value, ok = cache.Get(88)
-	if !ok || value!=8888 {
+	if !ok || value != 8888 {
 		t.Error("Get error, unexpected value")
 	}
 	if storage.CallCount() != 0 {
 		t.Error("There was a fetch for a key that should be cached")
-	}	
+	}
 	hit, miss = cache.Stats()
-	if hit!=2 || miss!=1 {
+	if hit != 2 || miss != 1 {
 		t.Error("Stat accounting error")
 	}
 
 	cache.Set(77, 11111)
 	value, ok = cache.Get(77)
-	if !ok || value!=11111 {
+	if !ok || value != 11111 {
 		t.Error("Get error unexpected value")
 	}
 	if storage.CallCount() != 0 {
 		t.Error("There was a fetch for a key that should be cached")
-	}	
+	}
 	hit, miss = cache.Stats()
-	if hit!=3 || miss!=1 {
+	if hit != 3 || miss != 1 {
 		t.Error("Stat accounting error")
 	}
 
 	// Request key not in cache or storage (return nil, false)
-	initial_len := cache.Len()
+	initLen := cache.Len()
 	storage.ResetCallCount()
-	for i:=0; i<10; i++ {
+	for i := 0; i < 10; i++ {
 		value, ok = cache.Get(1000)
 		if value != nil || ok {
 			t.Error(fmt.Sprintf("Should have returned nil, true not %v, %v", value, ok))
 		}
-		if initial_len != cache.Len() {
+		if initLen != cache.Len() {
 			t.Error("A failed Get shouldn't add anything to the DB")
 		}
 		if storage.CallCount() != i+1 {
@@ -138,14 +135,12 @@ func TestBasicFetch(t *testing.T) {
 	cache.Close()
 }
 
-
-
 // Test resizing cache with pending fetchs
 func TestResizingDuringFetch(t *testing.T) {
 	storage := newStorage(1000)
 
 	// fetch function with simulated delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(200 * time.Millisecond)
 		return storage.Get(key)
 	}
@@ -156,45 +151,45 @@ func TestResizingDuringFetch(t *testing.T) {
 		cache.Set(i, i)
 	}
 
-	concurrentGet := func(cache *LRUCache, key interface{}, result *interface{}) {
+	concurrentGet := func(cache *LRUCache, key interface{}, result *interface{}, lock *sync.Mutex) {
 		value, _ := cache.Get(key)
+		lock.Lock()
 		*result = value
+		lock.Unlock()
 	}
 
+	// Added a lock to avoid error messages when runing 'go test --race'
+	var lock sync.Mutex
 	var result1 interface{}
 	var result2 interface{}
 
-	go concurrentGet(cache, 10, &result1)
-	go concurrentGet(cache, 20, &result2)
+	go concurrentGet(cache, 10, &result1, &lock)
+	go concurrentGet(cache, 20, &result2, &lock)
 
 	cache.Resize(1, 1)
 
 	// Wait until concurrentGet is finished, to check it was successful
-	time.Sleep(1000*time.Millisecond)
-	if result1.(int) !=  10 || result2.(int) != 20 {
+	time.Sleep(1000 * time.Millisecond)
+	lock.Lock()
+	if result1.(int) != 10 || result2.(int) != 20 {
 		t.Error("Unexpected Get response during resizing")
 	}
-
-	// Wait until fetch pruning is working
-	if cache.Len() != 1 {
-		t.Error("Cache resize wasn't successful", cache.Len())
-	}
+	lock.Unlock()
 }
-
 
 // Test concurrent Get calls for the same key generate only one fetch
 func TestConcurrentGet(t *testing.T) {
 	storage := newStorage(1000)
 
 	// fetch function with simulated delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(100 * time.Millisecond)
 		return storage.Get(key)
 	}
 
 	cache := NewFetchingLRUCache(100, 10, fetcher, 1, 1000)
 
-	// Concurrent requests 
+	// Concurrent requests
 	concurrentGet := func(cache *LRUCache, key interface{}) {
 		cache.Get(key)
 	}
@@ -234,19 +229,18 @@ func TestConcurrentGet(t *testing.T) {
 	cache.Close()
 }
 
-
 // Test interrupting a Get call by concurrent Set discards fetch result
 func TestConcurrentGetSet(t *testing.T) {
 	storage := newStorage(1000)
 
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(150 * time.Millisecond)
 		return storage.Get(key)
 	}
 
 	cache := NewFetchingLRUCache(100, 10, fetcher, 1, 1000)
 
-	// Concurrent requests 
+	// Concurrent requests
 	concurrentGet := func(cache *LRUCache, key interface{}, expected_value interface{}) {
 		if value, ok := cache.Get(key); !ok || value != expected_value {
 			t.Error("Get didn't receive the expected value")
@@ -259,14 +253,13 @@ func TestConcurrentGetSet(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go concurrentGet(cache, i, 3000)
 		go concurrentGet(cache, i, 3000)
-		time.Sleep(20*time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		go concurrentSet(cache, i, 3000)
-		time.Sleep(400*time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 	}
 
-
 	// Wait until all fetch requests have finished and check results
-	time.Sleep(1000*time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	for i := 0; i < 10; i++ {
 		if value, ok := cache.Get(i); !ok || value != 3000 {
@@ -274,13 +267,12 @@ func TestConcurrentGetSet(t *testing.T) {
 		}
 	}
 }
-	
 
 // Test fetching with large worker pools
 func TestParallelFetchRequests(t *testing.T) {
 	storage := newStorage(1000)
 
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		// Sleep between 30-49ms
 		time.Sleep(time.Duration((key.(int)%20)+30) * time.Millisecond)
 		value, ok = storage.Get(key)
@@ -290,20 +282,20 @@ func TestParallelFetchRequests(t *testing.T) {
 
 	cache := NewFetchingLRUCache(100, 10, fetcher, 800, 5000)
 
-	// Concurrent requests 
+	// Concurrent requests
 	concurrentGet := func(cache *LRUCache, key interface{}) {
 		cache.Get(key)
 	}
 
 	// 1500 concurrent Get requests, without a large worker pool this would be too slow
-	for i:=0; i<800; i++ {
+	for i := 0; i < 800; i++ {
 		go concurrentGet(cache, i)
 		go concurrentGet(cache, i)
 		go concurrentGet(cache, i)
 	}
 
 	// Wait enough time for all request to finish
-	time.Sleep(1400*time.Millisecond)
+	time.Sleep(1400 * time.Millisecond)
 
 	// Get a new value to assure everithing is finished
 	if value, ok := cache.Get(801); !ok || value != 801 {
@@ -340,13 +332,12 @@ func TestParallelFetchRequests(t *testing.T) {
 	cache.Close()
 }
 
-
 // Basic Set tests
 func TestFetchingSet(t *testing.T) {
 	storage := newStorage(1000)
 
 	// fetcher function with simulated delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(400 * time.Millisecond)
 		value, ok = storage.Get(key)
 		return
@@ -361,17 +352,17 @@ func TestFetchingSet(t *testing.T) {
 	cache.Get(10000)
 
 	// Set value with a 0-9ms delay
-	concurrentSet := func (cache *LRUCache, key interface{}, value interface{}) {
-		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+	concurrentSet := func(cache *LRUCache, key interface{}, value interface{}) {
+		time.Sleep(time.Duration(key.(int)%10) * time.Millisecond)
 		cache.Set(key, value)
 	}
-	
+
 	for i := 0; i < 5000; i++ {
 		go concurrentSet(cache, i, i+9000)
 	}
 
 	// Wait for all Set calls to finish
-	time.Sleep(1000*time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	// Verify all values were Set
 	for i := 0; i < 5000; i++ {
@@ -380,9 +371,8 @@ func TestFetchingSet(t *testing.T) {
 		}
 	}
 
-	cache.Close()	
+	cache.Close()
 }
-
 
 // Test interrupting fetch operations by Setting the key value
 func TestFetchInterrupt(t *testing.T) {
@@ -390,22 +380,22 @@ func TestFetchInterrupt(t *testing.T) {
 	storage := newStorage(1000)
 
 	// fetcher function with simulated delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		time.Sleep(200 * time.Millisecond)
 		value, ok = storage.Get(key)
 		return
 	}
 
 	cache := NewFetchingLRUCache(100, 10, fetcher, 10, 1000)
-	
+
 	//
 	concurrentGet := func(cache *LRUCache, key interface{}) {
 		cache.Get(key)
 	}
 
-	for i := 0 ; i < 5; i++ {
+	for i := 0; i < 5; i++ {
 		go concurrentGet(cache, 100)
-		time.Sleep(10*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 
 		// Set the cache value to something different from the storage value
 		cache.Set(100, 12345)
@@ -417,25 +407,24 @@ func TestFetchInterrupt(t *testing.T) {
 		}
 
 		// Wait a few seconds to assure the lookup has had time to finish
-		time.Sleep(800*time.Millisecond)
-	
+		time.Sleep(800 * time.Millisecond)
+
 		// Check the value again
-		if value, ok := cache.Get(100); !ok || value!=12345 {
+		if value, ok := cache.Get(100); !ok || value != 12345 {
 			t.Error("lookup function modified the value updated by Set")
 		}
 	}
-	
+
 	cache.Close()
 }
-
 
 // Test peek with fetching enabled
 func TestFetchingPeek(t *testing.T) {
 
 	storage := newStorage(1000)
 
-	// 
-	fetcher := func (key interface{}) (value interface{}, ok bool){
+	//
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
 		value, ok = storage.Get(key)
 		return
 	}
@@ -447,8 +436,8 @@ func TestFetchingPeek(t *testing.T) {
 		t.Error("Peek shouldn't have generated a fetch")
 	}
 
-	time.Sleep(100*time.Millisecond) // Wait in case there was a fetch
-	
+	time.Sleep(100 * time.Millisecond) // Wait in case there was a fetch
+
 	if storage.CallCount() != 0 {
 		t.Error("Peek shouldn't have generated a fetch")
 	}
@@ -459,7 +448,7 @@ func TestFetchingPeek(t *testing.T) {
 
 	// Peek existing key
 	cache.Set(100, 1000)
-	
+
 	if value, ok := cache.Peek(100); !ok || value != 1000 {
 		t.Error("Peek didn't return the cached value")
 	}
@@ -469,22 +458,21 @@ func TestFetchingPeek(t *testing.T) {
 	if hit, miss := cache.Stats(); hit != 0 || miss != 0 {
 		t.Error("Peek shouldn't update the stats")
 	}
-}	
-	
+}
 
 // Operate with two caches to verify there is no shared state
 func TestFetchingDualCaches(t *testing.T) {
 	storage := newStorage(1000)
 
 	// fetch function with 'random' 0-9ms delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
-		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
+		time.Sleep(time.Duration(key.(int)%10) * time.Millisecond)
 		value, ok = storage.Get(key)
 		return
 	}
 
-	concurrentSet := func (cache *LRUCache, key interface{}, value interface{}) {
-		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+	concurrentSet := func(cache *LRUCache, key interface{}, value interface{}) {
+		time.Sleep(time.Duration(key.(int)%10) * time.Millisecond)
 		cache.Set(key, value)
 	}
 
@@ -493,7 +481,7 @@ func TestFetchingDualCaches(t *testing.T) {
 	cache2 := NewFetchingLRUCache(1000, 100, fetcher, 8, 10)
 
 	// Set different values for botch caches)
-	for i := 0; i < 500; i++{
+	for i := 0; i < 500; i++ {
 		go concurrentSet(cache1, i, i+1000)
 		go concurrentSet(cache1, i, i+1000)
 		go concurrentSet(cache2, i, i+2000)
@@ -501,7 +489,7 @@ func TestFetchingDualCaches(t *testing.T) {
 	}
 
 	// Wait until all requests are finished
-	time.Sleep(2000*time.Millisecond)
+	time.Sleep(2000 * time.Millisecond)
 
 	// Verify results
 	for i := 0; i < 500; i++ {
@@ -514,7 +502,7 @@ func TestFetchingDualCaches(t *testing.T) {
 	}
 
 	// This values are fetched from storage
-	for i :=500; i < 1000; i++ {
+	for i := 500; i < 1000; i++ {
 		if value, ok := cache1.Get(i); !ok || value != i {
 			t.Error("cache1 was not updated successfully")
 		}
@@ -525,63 +513,59 @@ func TestFetchingDualCaches(t *testing.T) {
 
 }
 
-
 // Test fetching when fetchRequest channel is full
 func TestFetchingFullChannel(t *testing.T) {
 
 	storage := newStorage(1000)
 
 	// fetch func has random 0-9ms delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
-		time.Sleep(time.Duration(key.(int)%10)* time.Millisecond)
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
+		time.Sleep(time.Duration(key.(int)%10) * time.Millisecond)
 		value, ok = storage.Get(key)
 		return
 	}
 
 	// Queue size 10
 	cache := NewFetchingLRUCache(100, 10, fetcher, 8, 10)
-	
+
 	//
 	concurrentGet := func(cache *LRUCache, key interface{}) {
 		cache.Get(key)
-	}	
+	}
 	concurrentSet := func(cache *LRUCache, key interface{}, value interface{}) {
 		cache.Set(key, value)
-	}	
-	
-	
-	for i:=0; i<100; i++ {
+	}
+
+	for i := 0; i < 100; i++ {
 		go concurrentGet(cache, i)
 		go concurrentSet(cache, i+2000, i+2000)
 		go concurrentGet(cache, i)
 	}
 
 	// wait enough time for all the lookups to finish
-	time.Sleep(4000*time.Millisecond)
+	time.Sleep(4000 * time.Millisecond)
 
 	cache.Close()
 }
 
-
-// Test cache is pruned when a fetch request fills the cache 
+// Test cache is pruned when a fetch request fills the cache
 func TestFetchingPrune(t *testing.T) {
 
 	storage := newStorage(1000)
 
 	// fetch func has random 0-9ms delay
-	fetcher := func (key interface{}) (value interface{}, ok bool){
-		time.Sleep(time.Duration(key.(int)%3)* time.Millisecond)
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
+		time.Sleep(time.Duration(key.(int)%3) * time.Millisecond)
 		value, ok = storage.Get(key)
 		return
 	}
 
 	cache := NewFetchingLRUCache(5, 1, fetcher, 8, 10)
 
-	
 	concurrentGet := func(cache *LRUCache, key interface{}) {
 		cache.Get(key)
-	}	
-	
+	}
+
 	go concurrentGet(cache, 1)
 	go concurrentGet(cache, 2)
 	go concurrentGet(cache, 3)
@@ -593,11 +577,9 @@ func TestFetchingPrune(t *testing.T) {
 	go concurrentGet(cache, 9)
 	go concurrentGet(cache, 10)
 
-	time.Sleep(1000*time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 	if cache.Len() != 5 {
 		t.Error("Cache wasn't pruned by fetch worker", cache.Len())
 	}
 }
-
-
