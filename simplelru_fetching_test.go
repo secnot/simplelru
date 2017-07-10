@@ -280,14 +280,15 @@ func TestParallelFetchRequests(t *testing.T) {
 		return
 	}
 
-	cache := NewFetchingLRUCache(100, 10, fetcher, 800, 5000)
+	cache := NewFetchingLRUCache(900, 10, fetcher, 800, 5000)
 
 	// Concurrent requests
 	concurrentGet := func(cache *LRUCache, key interface{}) {
+		time.Sleep(1*time.Millisecond)
 		cache.Get(key)
 	}
 
-	// 1500 concurrent Get requests, without a large worker pool this would be too slow
+	// 2400 concurrent Get requests, without a large worker pool this would be too slow
 	for i := 0; i < 800; i++ {
 		go concurrentGet(cache, i)
 		go concurrentGet(cache, i)
@@ -302,7 +303,7 @@ func TestParallelFetchRequests(t *testing.T) {
 		t.Error("Get returned the wrong value")
 	}
 	if storage.CallCount() != 801 {
-		t.Error("Concurrent Get calls should do a single fetch")
+		t.Error("Concurrent Get calls should do a single fetch", storage.CallCount())
 	}
 
 	// Test fetchs are sequential with a single go routine

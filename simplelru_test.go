@@ -360,10 +360,12 @@ func TestContains(t *testing.T) {
 	cache.Close()
 }
 
+
+// Test RemoveOldest method
 func TestRemoveOldest(t *testing.T) {
 	cache := NewLRUCache(100, 10)
 
-	// Removing from empty cache shouldn't
+	// Removing from empty cache should work
 	cache.RemoveOldest()
 
 	for i := 0; i < 100; i++ {
@@ -377,9 +379,31 @@ func TestRemoveOldest(t *testing.T) {
 	cache.RemoveOldest()
 
 	if cache.Contains(0) {
-		t.Error("PopOldest didn't remove 0 from cache")
+		t.Error("RemoveOldest didn't remove oldest element from cache")
 	}
 
+}
+
+// Test RemoveNewest method
+func TestRemoveNewest(t *testing.T) {
+	cache := NewLRUCache(100, 10)
+
+	// Removing from empty caceh should work
+	cache.RemoveNewest()
+
+	for i := 0; i <= 100; i++ {
+		cache.Set(i, i)
+	}
+
+	if !cache.Contains(100) {
+		t.Error("Cache should contains 100")
+	}
+
+	cache.RemoveNewest()
+
+	if cache.Contains(100) {
+		t.Error("RemoveNewest didn't remove newest element from cache")
+	}
 }
 
 // Test stat generation

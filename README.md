@@ -218,6 +218,15 @@ func (c *LRUCache) RemoveOldest()
 Remove Least Recently Used key from cache
 
 
+#### func (*LRUCache) RemoveNewest
+
+```go
+func (c *LRUCache) RemoveNewest()
+```    
+
+Remove Most Recently Used key from cache
+
+
 #### func (*LRUCache) ResetStats
 
 ```go

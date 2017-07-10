@@ -279,6 +279,13 @@ func (c *LRUCache) RemoveOldest() {
 	c.Unlock()
 }
 
+// RemoveNewest removes the most recently used item from cache
+func (c *LRUCache) RemoveNewest() {
+	c.Lock()
+	c.cache.PopLast()
+	c.Unlock()
+}
+
 // Peek allows to get an itme value without updating the cache, stats,
 // or triggering a fetch
 func (c *LRUCache) Peek(key interface{}) (value interface{}, ok bool) {
