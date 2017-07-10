@@ -584,3 +584,41 @@ func TestFetchingPrune(t *testing.T) {
 		t.Error("Cache wasn't pruned by fetch worker", cache.Len())
 	}
 }
+
+
+// Test Key is set after fetch is queued but before it has started
+func TestSetBeforeFetching(t *testing.T) {
+
+	storage := newStorage(1000)
+
+	// fetch func has random 0-9ms delay
+	fetcher := func(key interface{}) (value interface{}, ok bool) {
+		time.Sleep(50 * time.Millisecond)
+		value, ok = storage.Get(key)
+		return
+	}
+
+	cache := NewFetchingLRUCache(1000, 10, fetcher, 1, 100)
+
+	concurrentGet := func(cache *LRUCache, key interface{}, result *interface{}, delay int) {
+		time.Sleep(time.Duration(delay)*time.Millisecond)
+		*result, _ = cache.Get(key)
+	}
+
+	//
+	var result1 interface{}
+	var result2 interface{}
+	go concurrentGet(cache, 44, &result1, 1)
+	go concurrentGet(cache, 33, &result2, 10) // This will queued
+	time.Sleep(20*time.Millisecond)
+	cache.Set(33, 100) // This is set before second fetch starts
+	
+	time.Sleep(200*time.Millisecond)
+	if result2 != 100 {
+		t.Error("Fetch ignored Set() value", result1)
+	}
+
+	if result1 != 44 {
+		t.Error("First fetch failed")
+	}
+}
