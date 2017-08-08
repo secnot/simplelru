@@ -284,7 +284,7 @@ func TestParallelFetchRequests(t *testing.T) {
 
 	// Concurrent requests
 	concurrentGet := func(cache *LRUCache, key interface{}) {
-		time.Sleep(1*time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 		cache.Get(key)
 	}
 
@@ -585,7 +585,6 @@ func TestFetchingPrune(t *testing.T) {
 	}
 }
 
-
 // Test Key is set after fetch is queued but before it has started
 func TestSetBeforeFetching(t *testing.T) {
 
@@ -601,7 +600,7 @@ func TestSetBeforeFetching(t *testing.T) {
 	cache := NewFetchingLRUCache(1000, 10, fetcher, 1, 100)
 
 	concurrentGet := func(cache *LRUCache, key interface{}, result *interface{}, delay int) {
-		time.Sleep(time.Duration(delay)*time.Millisecond)
+		time.Sleep(time.Duration(delay) * time.Millisecond)
 		*result, _ = cache.Get(key)
 	}
 
@@ -610,10 +609,10 @@ func TestSetBeforeFetching(t *testing.T) {
 	var result2 interface{}
 	go concurrentGet(cache, 44, &result1, 1)
 	go concurrentGet(cache, 33, &result2, 10) // This will queued
-	time.Sleep(20*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	cache.Set(33, 100) // This is set before second fetch starts
-	
-	time.Sleep(200*time.Millisecond)
+
+	time.Sleep(200 * time.Millisecond)
 	if result2 != 100 {
 		t.Error("Fetch ignored Set() value", result1)
 	}
