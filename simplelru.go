@@ -2,7 +2,7 @@ package simplelru
 
 import (
 	"fmt"
-	"github.com/secnot/orderedmap"
+	"github.com/secnot/simplelru/orderedmap"
 	"sync"
 )
 
@@ -97,7 +97,7 @@ func (c *LRUCache) goFetchWorkerFunc() {
 			// Only update the cache if fetching was successful
 			if fetchOk {
 				if c.cache.Len() >= c.size {
-					c.prune()
+					c.prune(c.pruneSize)
 				}
 				c.cache.Set(key, value)
 			}
@@ -132,7 +132,7 @@ func NewFetchingLRUCache(size int, pruneSize int,
 	}
 
 	cache := &LRUCache{
-		cache:     orderedmap.NewOrderedMap(),
+		cache:     orderedmap.NewOrderedMap(size+1),
 		size:      size,
 		pruneSize: pruneSize,
 		hitCount:  0,
@@ -158,8 +158,29 @@ func NewLRUCache(size int, pruneSize int) *LRUCache {
 	return NewFetchingLRUCache(size, pruneSize, nil, 0, 0)
 }
 
+
+func (c *LRUCache) growCache(size int) {	
+	
+	newCache := orderedmap.NewOrderedMap(size)
+	for {
+		key, value, ok := c.cache.PopFirst()
+		if !ok {
+			break
+		}
+
+		// Add records to new cache
+		err := newCache.Set(key, value)
+		if err == orderedmap.ErrFull {
+			newCache.PopFirst()
+		}
+		newCache.Set(key, value)
+	}
+	c.cache = newCache
+}
+
 // Resize sets new max cache size, if its smaller than the current size
 // it will be pruned to size. (ignores pruneSize)
+// WARNING: Resizing the cache is an expensive operation.
 func (c *LRUCache) Resize(size int, pruneSize int) {
 	if size < 1 {
 		panic("LRUCache: min cache size is 1")
@@ -169,20 +190,24 @@ func (c *LRUCache) Resize(size int, pruneSize int) {
 	}
 
 	c.Lock()
+
+	if c.cache.Cap() < size {
+		// New size is bigger than current
+		c.growCache(size)
+	} else if size < c.cache.Len() {
+		// New size is smaller than current prune oldest
+		c.prune(c.cache.Len()-size)
+	}
+	
 	c.size = size
 	c.pruneSize = pruneSize
-	if c.cache.Len() > c.size {
-		toPrune := c.cache.Len() - c.size
-		for i := 0; i < toPrune; i++ {
-			c.cache.PopFirst()
-		}
-	}
+	
 	c.Unlock()
 }
 
 // prune Remove pruneSize elements from cache
-func (c *LRUCache) prune() {
-	for x := c.pruneSize; x > 0; x-- {
+func (c *LRUCache) prune(size int) {
+	for x := size; x > 0; x-- {
 		if _, _, ok := c.cache.PopFirst(); !ok {
 			break // Cache is already empty
 		}
@@ -252,7 +277,7 @@ func (c *LRUCache) Set(key interface{}, value interface{}) (pruned bool) {
 	}
 
 	if !inCache && c.cache.Len() >= c.size {
-		c.prune()
+		c.prune(c.pruneSize)
 		pruned = true
 	} else {
 		pruned = false
@@ -305,7 +330,7 @@ func (c *LRUCache) Contains(key interface{}) bool {
 // being fetched are not purged.
 func (c *LRUCache) Purge() {
 	c.Lock()
-	c.cache = orderedmap.NewOrderedMap()
+	c.cache = orderedmap.NewOrderedMap(c.size)
 	c.Unlock()
 }
 
