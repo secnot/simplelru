@@ -100,4 +100,4 @@ func main() {
 
 ## Documentation
 
-The full API documentations is available at [GoDoc](http://godoc.org/github.com/secnot/simplelru).
+The full API documentation is available at [GoDoc](http://godoc.org/github.com/secnot/simplelru).
