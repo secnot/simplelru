@@ -12,7 +12,6 @@ A LRU Cache (Least Recently Used) written in Go.
 Download the package and its only dependency:
 
 ```bash
-go get github.com/secnot/orderedmap
 go get github.com/secnot/simplerlu
 ```
 
