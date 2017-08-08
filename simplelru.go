@@ -252,7 +252,7 @@ func (c *LRUCache) Get(key interface{}) (value interface{}, ok bool) {
 }
 
 // Set or update key value, returns true if the cache was pruned to make space
-// for a new key. Set has priority over fetched values, so if the key set is
+// for a new key. Set has priority over fetched values, so if the key is
 // being fetched, all goroutines waiting will wakeup and receive the 'setted' value
 // while the fetch results are discarded.
 func (c *LRUCache) Set(key interface{}, value interface{}) (pruned bool) {
