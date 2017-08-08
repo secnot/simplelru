@@ -32,9 +32,9 @@ type OrderedMap struct {
 func NewOrderedMap(size int) *OrderedMap {
 	root := &node{nil, nil, nil, nil} // sentinel Node
 	root.Next, root.Prev = root, root
-	
+
 	pool := make([]node, size, size)
-	
+
 	//
 	om := &OrderedMap{
 		table: make(map[interface{}]*node),
@@ -42,8 +42,8 @@ func NewOrderedMap(size int) *OrderedMap {
 		pool:  pool,
 		free:  nil,
 	}
-	
-	// Add pool nodes to free linked list 
+
+	// Add pool nodes to free linked list
 	for n, _ := range pool {
 		pool[n].Next = om.free
 		om.free = &pool[n]
@@ -62,37 +62,35 @@ func (om *OrderedMap) Cap() int {
 	return len(om.pool)
 }
 
-
 // getNode a node from free pool
-func (om *OrderedMap) getNode(key interface{}, value interface{}, 
-				next *node, prev *node) (n *node, err error) {
+func (om *OrderedMap) getNode(key interface{}, value interface{},
+	next *node, prev *node) (n *node, err error) {
 	if om.free == nil {
 		return nil, ErrFull
 	}
-					
+
 	n = om.free
 	om.free = om.free.Next
 
-	n.Next  = next
-	n.Prev  = prev
-	n.Key   = key
+	n.Next = next
+	n.Prev = prev
+	n.Key = key
 	n.Value = value
 	return n, nil
 }
 
 // freeNode returns a node to the free pool
 func (om *OrderedMap) freeNode(n *node) {
-	n.Key   = nil
+	n.Key = nil
 	n.Value = nil
-	n.Prev  = nil
-	n.Next  = om.free
+	n.Prev = nil
+	n.Next = om.free
 	om.free = n
 }
 
-
 // Set the key value, if the key overwrites an existing entry, the original
 // insertion position is left unchanged, otherwise the key is inserted at the end.
-func (om *OrderedMap) Set(key interface{}, value interface{}) (err error){
+func (om *OrderedMap) Set(key interface{}, value interface{}) (err error) {
 	if nd, ok := om.table[key]; !ok {
 		// New entry
 		root := om.root
@@ -101,7 +99,7 @@ func (om *OrderedMap) Set(key interface{}, value interface{}) (err error){
 			root.Prev.Next = nd
 			root.Prev = nd
 			om.table[key] = nd
-		}	
+		}
 	} else {
 		// Update existing entry value
 		nd.Value = value

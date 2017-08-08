@@ -348,12 +348,12 @@ func TestMapSize(t *testing.T) {
 		t.Error("OderedMap unexpectedly full")
 		return
 	}
-	
+
 	if err := om.Set("two", 2); err != nil {
 		t.Error("OderedMap unexpectedly full")
 		return
 	}
-	
+
 	if err := om.Set("three", 3); err != nil {
 		t.Error("OrderedMap unexpectedly full")
 		return
@@ -368,7 +368,7 @@ func TestMapSize(t *testing.T) {
 	if key != "three" || value != 3 || ok != true {
 		t.Error("PopLast(): Didn't return last value")
 	}
-	
+
 	if err := om.Set("four", 4); err != nil {
 		t.Error("Orderedmap unexpectedly full")
 		return

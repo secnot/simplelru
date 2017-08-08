@@ -132,7 +132,7 @@ func NewFetchingLRUCache(size int, pruneSize int,
 	}
 
 	cache := &LRUCache{
-		cache:     orderedmap.NewOrderedMap(size+1),
+		cache:     orderedmap.NewOrderedMap(size + 1),
 		size:      size,
 		pruneSize: pruneSize,
 		hitCount:  0,
@@ -158,9 +158,8 @@ func NewLRUCache(size int, pruneSize int) *LRUCache {
 	return NewFetchingLRUCache(size, pruneSize, nil, 0, 0)
 }
 
+func (c *LRUCache) growCache(size int) {
 
-func (c *LRUCache) growCache(size int) {	
-	
 	newCache := orderedmap.NewOrderedMap(size)
 	for {
 		key, value, ok := c.cache.PopFirst()
@@ -196,12 +195,12 @@ func (c *LRUCache) Resize(size int, pruneSize int) {
 		c.growCache(size)
 	} else if size < c.cache.Len() {
 		// New size is smaller than current prune oldest
-		c.prune(c.cache.Len()-size)
+		c.prune(c.cache.Len() - size)
 	}
-	
+
 	c.size = size
 	c.pruneSize = pruneSize
-	
+
 	c.Unlock()
 }
 

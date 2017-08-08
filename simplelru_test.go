@@ -360,7 +360,6 @@ func TestContains(t *testing.T) {
 	cache.Close()
 }
 
-
 // Test RemoveOldest method
 func TestRemoveOldest(t *testing.T) {
 	cache := NewLRUCache(100, 10)
